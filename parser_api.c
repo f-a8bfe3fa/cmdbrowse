@@ -18,10 +18,12 @@ static char* json_extract_string(const char* json, const char* key) {
     size_t key_len = strlen(key);
     const char* p = json;
     while ((p = strstr(p, key)) != NULL) {
+        /* Verify this looks like a JSON key: key should be surrounded by quotes,
+           and the char before the opening quote should be structural ({ , [ or whitespace) */
         if (p > json) {
             const char* before = p - 1;
             while (before > json && isspace((unsigned char)*before)) before--;
-            if (*before != '"') { p += key_len; continue; }
+            if (*before != '{' && *before != ',' && *before != '[') { p += key_len; continue; }
         }
         p += key_len;
         while (*p && isspace((unsigned char)*p)) p++;

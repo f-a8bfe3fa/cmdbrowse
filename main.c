@@ -131,6 +131,20 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
         snprintf(req.url, sizeof(req.url), "%s", search_url);
     }
 
+    /* Tavily requires POST with JSON body */
+    if (strcmp(engine->name, "tavily") == 0) {
+        req.method = HTTP_POST;
+        http_add_header(&req, "Content-Type", "application/json");
+        char json_body[1024];
+        char encoded_query[MAX_QUERY_LENGTH * 3];
+        url_encode(query, encoded_query, sizeof(encoded_query));
+        snprintf(json_body, sizeof(json_body),
+            "{\"query\":\"%s\",\"max_results\":%d,\"search_depth\":\"basic\",\"include_answer\":false,\"include_raw_content\":false}",
+            query, sq.results_per_page);
+        snprintf(req.body, sizeof(req.body), "%s", json_body);
+        req.body_length = (int)strlen(req.body);
+    }
+
     HttpResponse http_resp;
     http_response_init(&http_resp);
 
