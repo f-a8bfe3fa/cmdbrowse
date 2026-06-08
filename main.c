@@ -125,7 +125,23 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
     HttpResponse http_resp;
     http_response_init(&http_resp);
 
-    if (!http_execute(&req, &http_resp)) {
+    bool http_ok = false;
+    if (engine->requires_api_key && engine->api_key_env[0]) {
+        const char* api_key = getenv(engine->api_key_env);
+        if (api_key && api_key[0]) {
+            http_ok = http_execute_with_api_key(&req, &http_resp, "X-Subscription-Token", api_key);
+        } else {
+            http_response_free(&http_resp);
+            SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));
+            if (err) { snprintf(err->error_message, sizeof(err->error_message),
+                "API key not set. Set %s environment variable.", engine->api_key_env); err->status_code = -1; }
+            return err;
+        }
+    } else {
+        http_ok = http_execute(&req, &http_resp);
+    }
+
+    if (!http_ok) {
         http_response_free(&http_resp);
         SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));
         if (err) { snprintf(err->error_message, sizeof(err->error_message), "Network error"); err->status_code = -1; }
@@ -542,8 +558,10 @@ static void command_mode(BrowserContext* ctx, const char* query) {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+#endif
 
     memset(&g_browser, 0, sizeof(g_browser));
     browser_init(&g_browser);

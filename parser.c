@@ -1,5 +1,13 @@
 #include "parser.h"
 #include "utils.h"
+#include <ctype.h>
+
+#ifndef min
+#define min(a,b) ((a)<(b)?(a):(b))
+#endif
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif
 
 char* parser_extract_text_between(const char* haystack, const char* after, const char* before) {
     const char* s = after ? strstr(haystack, after) : haystack;
@@ -407,14 +415,20 @@ SearchResponse* parser_parse_response(SearchEngine* engine, SearchQuery* query, 
         return resp;
     }
 
-    ParserFunc parser = NULL;
-    if (strcmp(engine->name, "google") == 0) parser = parser_parse_google;
-    else if (strcmp(engine->name, "bing") == 0) parser = parser_parse_bing;
-    else if (strcmp(engine->name, "duckduckgo") == 0) parser = parser_parse_duckduckgo;
-    else if (strcmp(engine->name, "yahoo") == 0) parser = parser_parse_yahoo;
-    else parser = parser_parse_generic;
-
-    SearchResponse* resp = parser(http_resp->body, engine, query);
+    SearchResponse* resp = NULL;
+    if (strcmp(engine->name, "brave_api") == 0) {
+        resp = parser_parse_brave_api(http_resp->body, engine, query);
+    } else if (strcmp(engine->name, "ddg_api") == 0) {
+        resp = parser_parse_ddg_api(http_resp->body, engine, query);
+    } else {
+        ParserFunc parser = NULL;
+        if (strcmp(engine->name, "google") == 0) parser = parser_parse_google;
+        else if (strcmp(engine->name, "bing") == 0) parser = parser_parse_bing;
+        else if (strcmp(engine->name, "duckduckgo") == 0) parser = parser_parse_duckduckgo;
+        else if (strcmp(engine->name, "yahoo") == 0) parser = parser_parse_yahoo;
+        else parser = parser_parse_generic;
+        resp = parser(http_resp->body, engine, query);
+    }
     if (resp) {
         resp->status_code = http_resp->status_code;
         resp->search_time_seconds = http_resp->elapsed_seconds;

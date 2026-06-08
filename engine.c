@@ -310,6 +310,28 @@ static const SearchEngine PRESET_ENGINES[] = {
         .country_code = "", .language_code = "en", .region_tag = "legacy",
         .icon = "S", .enabled = false, .priority = 60, .rate_limit_ms = 1000
     },
+    {
+        .name = "brave_api", .display_name = "Brave Search API",
+        .search_url = "https://api.search.brave.com/res/v1/web/search",
+        .search_url_encoded = "https://api.search.brave.com/res/v1/web/search?q={query}&count={count}&offset={offset}&search_lang={lang}&safesearch={safe}",
+        .query_param = "q", .page_param = "offset", .count_param = "count",
+        .results_per_page = 20, .supports_suggestions = false, .supports_images = false,
+        .supports_video = false, .supports_news = false, .supports_academic = false,
+        .requires_api_key = true, .api_key_env = "BRAVE_API_KEY", .tier = ENGINE_TIER_GLOBAL,
+        .country_code = "", .language_code = "en", .region_tag = "global",
+        .icon = "B", .enabled = true, .priority = 1, .rate_limit_ms = 200
+    },
+    {
+        .name = "ddg_api", .display_name = "DuckDuckGo API",
+        .search_url = "https://api.duckduckgo.com/",
+        .search_url_encoded = "https://api.duckduckgo.com/?q={query}&format=json",
+        .query_param = "q", .page_param = "", .count_param = "",
+        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
+        .supports_video = false, .supports_news = false, .supports_academic = false,
+        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
+        .country_code = "", .language_code = "en", .region_tag = "privacy",
+        .icon = "D", .enabled = true, .priority = 2, .rate_limit_ms = 500
+    },
 };
 
 #define PRESET_COUNT (sizeof(PRESET_ENGINES) / sizeof(PRESET_ENGINES[0]))
