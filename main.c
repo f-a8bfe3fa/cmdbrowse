@@ -8,6 +8,7 @@
 #include "bookmarks.h"
 #include "cache.h"
 #include "ui.h"
+#include "usage_tracker.h"
 
 static BrowserContext g_browser;
 
@@ -91,6 +92,14 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
         return NULL;
     }
 
+    /* Check usage quota before searching */
+    if (!usage_tracker_can_use(engine_name)) {
+        SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));
+        if (err) { snprintf(err->error_message, sizeof(err->error_message),
+            "Quota exceeded for %s.", engine_name); err->status_code = -1; }
+        return err;
+    }
+
     SearchResponse* cached = NULL;
     if (cache_lookup(ctx, query, engine_name, page, &cached)) {
         return cached;
@@ -166,7 +175,9 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
     SearchResponse* resp = parser_parse_response(engine, &sq, &http_resp);
     http_response_free(&http_resp);
 
-    if (resp && resp->result_count > 0) {
+    /* Record successful API call in usage tracker */
+    if (resp && resp->status_code >= 200 && resp->status_code < 400 && resp->result_count > 0) {
+        usage_tracker_record_call(engine_name);
         if (sq.deduplicate) {
             resp->result_count = parser_dedup_results(resp->results, resp->result_count);
         }
@@ -194,6 +205,10 @@ static SearchResponse* do_multi_search(BrowserContext* ctx, const char* query, i
     int r_idx = 0;
     for (int i = 0; i < ctx->engine_count && r_idx < enabled_count; i++) {
         if (ctx->engines[i].enabled) {
+            /* Skip engines that have exceeded their quota */
+            if (!usage_tracker_can_use(ctx->engines[i].name)) {
+                continue;
+            }
             ui_render_info("Searching engine...");
             SearchResponse* r = do_search(ctx, query, ctx->engines[i].name, page);
             if (r && r->result_count > 0) {
@@ -374,6 +389,8 @@ static void handle_command(BrowserContext* ctx, char* input) {
                 ui_render_success("Engine removed.");
             else
                 ui_render_error("Engine not found or cannot remove preset engine.");
+        } else if (strcmp(argc[1], "usage") == 0) {
+            usage_tracker_print_stats();
         } else {
             ui_render_engine_list(ctx);
         }
@@ -576,6 +593,7 @@ int main(int argc, char* argv[]) {
 
     memset(&g_browser, 0, sizeof(g_browser));
     browser_init(&g_browser);
+    usage_tracker_init();
 
     if (!http_init()) {
         fprintf(stderr, "ERROR: Failed to initialize HTTP subsystem.\n");
@@ -607,6 +625,7 @@ int main(int argc, char* argv[]) {
     }
 
     browser_save_all(&g_browser);
+    usage_tracker_shutdown();
     http_cleanup();
 
     free(g_browser.config.sections);
