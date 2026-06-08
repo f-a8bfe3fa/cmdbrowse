@@ -1,150 +1,151 @@
-# 📘 CMDBrowser v2.0 – Comprehensive Technical Introduction
+# CMDBrowser v2.0
 
-## 1. Executive Summary
-**CMDBrowser v2.0** is a high-performance, multi-engine command-line web search utility engineered in pure C11. Designed for developers, system administrators, researchers, and power users, it transforms the terminal into a fully-featured search interface capable of querying multiple search engines simultaneously, aggregating results, and outputting them in highly configurable formats. The application operates with minimal overhead, requiring no graphical dependencies, and leverages native Windows console APIs alongside a robust WinHTTP networking stack. Its architecture emphasizes modularity, persistent state management, and developer-friendly extensibility, making it suitable for both interactive research and automated scripting workflows.
-
----
-
-## 2. System Architecture & Core Components
-CMDBrowser follows a centralized state-machine architecture driven by a single `BrowserContext` struct that orchestrates all subsystems. The codebase is deliberately modular, delegating specialized responsibilities to external headers:
-
-| Subsystem | Header Module | Responsibility |
-|:---|:---|:---|
-| **State Management** | `types.h` | `BrowserContext` lifecycle, configuration, UI mode, engine registry |
-| **Utilities** | `utils.h` | String trimming, duplication, case conversion, whitespace handling |
-| **Networking** | `http.h` | WinHTTP initialization, request building, header injection, proxy routing, response execution |
-| **Engine Registry** | `engine.h` | Search engine abstraction, URL templating, rate-limit definitions, tier management |
-| **Response Parsing** | `parser.h` | HTML/JSON extraction, result deduplication, pagination metadata parsing |
-| **Configuration** | `config.h` | INI-based persistent settings (`config.ini`), section/key-value CRUD |
-| **History** | `history.h` | Query logging, success/failure tracking, export to CSV |
-| **Bookmarks** | `bookmarks.h` | Persistent result storage, HTML import/export, tag-based filtering |
-| **Caching** | `cache.h` | Query-result LRU cache, TTL management, disk/memory persistence |
-| **Terminal UI** | `ui.h` | ANSI color rendering, rich formatting, pagination, header/footer prompts |
-
-The core orchestration logic resides in `main.c`, which handles initialization, command dispatch, execution routing, and graceful teardown.
+一个基于 API 驱动的命令行网页搜索工具，纯 C11 编写，支持 Linux。通过调用 Tavily、Bing Search、Google Custom Search 三大搜索 API，在终端中返回结构化的搜索结果。
 
 ---
 
-## 3. Key Features & Capabilities
+## 特性
 
-### 🔍 Multi-Engine Aggregation
-- Queries Google, Bing, DuckDuckGo, Yahoo, and user-defined custom engines.
-- Merges results across engines with relevance-based sorting and automatic deduplication.
-- Supports pagination and configurable result limits (`1–200` per request).
-
-### ⚙️ Advanced Search Control
-- **Rate Limit Handling:** Automatically backs off on `403/429` HTTP responses using engine-specific `sleep_ms` multipliers.
-- **Safe Search:** Three-tier filtering (`OFF`, `MODERATE`, `STRICT`) enforced per-engine.
-- **Proxy Support:** Full HTTP/HTTPS proxy routing configurable at runtime.
-- **Custom Engines:** Add/remove search providers via URL templates and query parameter mapping.
-
-### 💾 Persistent State Management
-- **Configuration:** `config.ini` stores display preferences, network limits, output formats, and proxy settings.
-- **History:** Tracks all queries, engine targets, result counts, and success status. Supports search, stats, and CSV export.
-- **Bookmarks:** Save, tag, search, and export results. Supports HTML bookmark file import for cross-tool compatibility.
-- **Cache:** Stores parsed responses to accelerate repeated queries. Includes automated cleanup and expiration logic.
-
-### 🎨 Rich Terminal Output
-- ANSI escape code rendering for syntax highlighting and structural formatting.
-- Six output formats: `rich` (default), `plain`, `json`, `csv`, `markdown`, `html`.
-- Toggleable UI features: color output, line numbers, console clearing, and footer prompts.
+- **多引擎 API 搜索**：支持 Tavily、Bing Search API、Google Custom Search，按优先级自动调度
+- **智能配额管理**：本地持久化记录 API 调用次数，支持日/月限额自动清零，额度耗尽自动降级到下一引擎
+- **多种输出格式**：rich（默认）、plain、json、csv、markdown、html
+- **交互式 Shell**：REPL 模式支持命令补全、历史记录、书签管理
+- **跨平台**：基于 libcurl 和 POSIX API，原生支持 Linux（Windows 支持已移除）
+- **零外部依赖**：不依赖 Python、Node.js 或浏览器内核，单二进制文件即可运行
 
 ---
 
-## 4. Command Reference & Interactive Shell
+## 安装
 
-CMDBrowser operates as a REPL (Read-Eval-Print Loop) with a comprehensive slash-command syntax:
+### 依赖
 
-| Command Category | Examples | Description |
-|:---|:---|:---|
-| **Search Execution** | `/search <query>`, `/s <q>`, `? <q>` | Multi-engine search with default settings |
-| | `/mega <query>`, `/all <q>` | Force query across ALL registered engines |
-| | `/google`, `/bing`, `/ddg`, `/yahoo`, `/engine <name> <q>` | Single-engine targeted search |
-| **Engine Management** | `/engines` | List all engines with status/tier info |
-| | `/engines on/off <name>` | Enable or disable specific engines |
-| | `/engines add <name> <url> <parser>` | Register custom search provider |
-| | `/engines remove <name>` | Remove custom engine |
-| **Data Management** | `/history [search\|clear\|stats\|export <file>]` | Query log operations |
-| | `/bookmark [add\|remove\|list\|search\|import\|export]` | Persistent result curation |
-| | `/cache [stats\|clear\|cleanup]` | Cache inspection and maintenance |
-| **Display & Format** | `/format [plain\|json\|csv\|md\|html\|rich]` | Switch output rendering mode |
-| | `/color [on\|off\|toggle]` | Enable/disable ANSI colors |
-| | `/lines [on\|off\|toggle]` | Toggle line numbering |
-| | `/max <n>` | Set result limit per page (`1–200`) |
-| **Network & Security** | `/proxy <url>` | Set HTTP/HTTPS proxy |
-| | `/safe [off\|mod\|strict]` | Configure safe search level |
-| **System & Utility** | `/config get\|set\|list\|keys` | Runtime INI configuration management |
-| | `/open <url>` | Launch URL in default system browser (`start ""`) |
-| | `/quit`, `/exit`, `/q`, `/save`, `/help`, `/about`, `/clear` | Session control & diagnostics |
+- GCC 或 Clang（支持 C11）
+- libcurl
+- pthread
 
-Any input not prefixed with `/`, `?`, or `.` is automatically treated as a search query and routed to `do_multi_search()`.
+```bash
+# Debian/Ubuntu
+sudo apt-get install build-essential libcurl4-openssl-dev
 
----
+# Fedora/RHEL
+sudo dnf install gcc make libcurl-devel
 
-## 5. Technical Implementation Details
-
-### 🧠 State & Memory Management
-- Centralized `BrowserContext` prevents global variable pollution.
-- Explicit lifecycle management: `browser_init()` allocates and configures; `main()` ensures `free()` is called for config, history, bookmarks, and HTTP subsystems before exit.
-- Bounds-safe string operations via `snprintf`, `_dup` wrappers, and fixed-size stack buffers (`MAX_QUERY_LENGTH`, `MAX_PATH_LENGTH`).
-
-### 🌐 HTTP & Networking Layer
-- Leverages Windows HTTP Services (WinHTTP) for robust TLS, proxy auto-detection, and asynchronous readiness.
-- Headers are dynamically injected (`User-Agent`, `Accept`, `Accept-Language`).
-- Graceful degradation on network failures: returns structured error responses with status codes instead of crashing.
-
-### 🔀 Result Processing Pipeline
-1. **Cache Lookup:** Checks for valid cached response matching query + engine + page.
-2. **Request Construction:** Engine-specific URL builder injects query, pagination, and safe-search parameters.
-3. **Execution & Backoff:** `http_execute()` handles I/O. `403/429` triggers exponential backoff via `sleep_ms`.
-4. **Parsing:** HTML/JSON stripped into `SearchResult` structs.
-5. **Deduplication:** URL/title normalization removes cross-engine duplicates.
-6. **Merging & Sorting:** Results ranked by relevance score, merged into unified response object.
-7. **Storage:** Cached, logged to history, and formatted for UI output.
-
-### 🖥️ Console & Encoding
-- Forces UTF-8 console output (`SetConsoleOutputCP(CP_UTF8)`) for international character support.
-- ANSI escape sequences managed via `enable_ansi_escapes()` / `disable_ansi_escapes()` for cross-terminal compatibility.
-- Interactive prompt uses colored input markers (`COLOR_BRIGHT_GREEN " >>> "`).
-
----
-
-## 6. Execution Modes & Usage Patterns
-
-### 🟢 Interactive Shell Mode
-```text
-cmdbrowser.exe
+# Arch
+sudo pacman -S base-devel curl
 ```
-Launches the REPL loop. Ideal for exploratory research, iterative querying, and manual bookmark/history management. Maintains state across commands until `/quit` or `EOF`.
 
-### 🔵 Command-Line / Scripting Mode
-```text
-cmdbrowser.exe "quantum computing advances 2025"
-cmdbrowser.exe /search machine learning
-cmdbrowser.exe /format json /proxy http://127.0.0.1:8080 "AI ethics"
+### 编译
+
+```bash
+cd /workspace
+make
 ```
-Executes a single query or command chain, outputs to `stdout`, and exits. Perfect for piping into `jq`, `grep`, `awk`, or automation scripts.
+
+编译产物为 `./cmdbrowser`。
 
 ---
 
-## 7. System Requirements & Build Considerations
-- **OS:** Windows 7+ (x64 recommended)
-- **Compiler:** MSVC 2019+, GCC 9+, or Clang-cl with C11 standard support
-- **Dependencies:** Windows SDK (WinHTTP, Console API), standard C runtime (`msvcrt`/`ucrtbase`)
-- **Build Flags:** `-std=c11`, `-DUNICODE` (if applicable), link `winhttp.lib`, `kernel32.lib`
-- **Architecture:** Single-threaded execution in current snapshot. Concurrency limit (`ctx->concurrent_limit`) is reserved for future async I/O integration.
+## 配置 API 密钥
+
+项目通过环境变量读取 API 密钥：
+
+```bash
+export TAVILY_API_KEY="your_tavily_key"
+export BING_API_KEY="your_bing_key"
+export GOOGLE_API_KEY="your_google_key"
+export GOOGLE_SEARCH_CX="your_google_cx"
+```
+
+建议添加到 `~/.bashrc` 或 `~/.zshrc`。
+
+| 引擎 | 环境变量 | 限额（默认） | 说明 |
+|:---|:---|:---|:---|
+| Tavily | `TAVILY_API_KEY` | 月限 1000 次 | 主引擎，优先级最高 |
+| Bing Search | `BING_API_KEY` | 月限 1000 次 | 次选引擎 |
+| Google Custom Search | `GOOGLE_API_KEY` + `GOOGLE_SEARCH_CX` | 日限 100 次 | 备用引擎 |
 
 ---
 
-## 8. Extensibility & Future Roadmap
-The modular header structure enables straightforward extension:
-- **Threading:** Replace sequential `do_multi_search()` loop with thread pool (`_beginthread`/`std::thread`) to honor `ctx->concurrent_limit`.
-- **Plugin API:** Expose engine parser hooks for community-maintained regex/JSONPath extractors.
-- **Cross-Platform Port:** Swap WinHTTP for `libcurl` or `neon`, replace `SetConsoleCP` with POSIX termios, and implement `~/.cmdbrowser/` config paths.
-- **Advanced Caching:** Integrate SQLite for indexed query/result storage and full-text search over history.
-- **OAuth / API Keys:** Support authenticated engine endpoints (Google Custom Search API, Bing Web Search API).
+## 使用
+
+### 交互模式
+
+```bash
+./cmdbrowser
+```
+
+启动后进入 REPL，提示符为 `>>>`，支持以下命令：
+
+| 命令 | 说明 |
+|:---|:---|
+| `<query>` | 直接输入搜索词，使用所有可用引擎 |
+| `/search <query>` | 同上 |
+| `/engine <name> <query>` | 指定单个引擎搜索 |
+| `/tavily <query>` | 使用 Tavily 搜索 |
+| `/bing <query>` | 使用 Bing 搜索 |
+| `/google <query>` | 使用 Google 搜索 |
+| `/engines` | 列出所有引擎状态 |
+| `/engines usage` | 查看 API 调用配额统计 |
+| `/format <rich/plain/json/csv/md/html>` | 切换输出格式 |
+| `/history` | 查看搜索历史 |
+| `/bookmark add <id>` | 收藏结果 |
+| `/quit` | 退出 |
+
+### 命令行模式
+
+```bash
+# 单次搜索
+./cmdbrowser "linux kernel"
+
+# 指定引擎
+./cmdbrowser "/engine tavily linux kernel"
+
+# JSON 输出
+./cmdbrowser "/format json linux kernel"
+```
 
 ---
 
-## 9. Conclusion
-CMDBrowser v2.0 is a meticulously engineered terminal-native search orchestrator that bridges the gap between lightweight CLI utilities and full-featured web aggregation platforms. By decoupling networking, parsing, state management, and UI rendering into discrete modules, it achieves exceptional maintainability and performance. Its rich command taxonomy, persistent data layer, and format flexibility make it an indispensable tool for developers, data analysts, and privacy-conscious users who demand precision, speed, and scriptability without leaving the command line.
+## 配额管理
+
+用量数据持久化存储在 `~/.cmdbrowser/usage.dat`，自动管理：
+
+- **Tavily / Bing**：每月 1 日清零月计数
+- **Google**：每日 0 点清零日计数
+
+搜索前自动检查配额，若当前引擎额度耗尽，自动跳过并尝试下一优先级的引擎。
+
+---
+
+## 项目结构
+
+| 文件 | 说明 |
+|:---|:---|
+| `main.c` | 程序入口、命令解析、搜索调度 |
+| `engine.c/h` | 搜索引擎注册、URL 构造、优先级管理 |
+| `http.c/h` | libcurl HTTP 请求、API Key 认证 |
+| `parser.c/h` | 响应解析路由 |
+| `parser_api.c` | Tavily/Bing/Google JSON 响应解析 |
+| `usage_tracker.c/h` | 本地用量统计、配额检查、持久化 |
+| `ui.c/h` | 终端 UI 渲染、颜色、分页 |
+| `config.c/h` | INI 配置文件管理 |
+| `history.c/h` | 搜索历史记录 |
+| `bookmarks.c/h` | 书签管理 |
+| `cache.c/h` | 搜索结果缓存 |
+| `utils.c/h` | 字符串、编码、文件工具函数 |
+| `types.h` | 核心数据结构、常量、跨平台类型 |
+
+---
+
+## 技术细节
+
+- **HTTP 层**：libcurl 替代 WinHTTP，支持 HTTPS、代理、自定义 Header
+- **JSON 解析**：纯 C 标准库字符串操作（`strstr`、`strchr`），零第三方 JSON 库依赖
+- **并发**：基于 pthread 的互斥锁保护全局状态
+- **内存管理**：显式生命周期管理，无垃圾回收
+
+---
+
+## 许可
+
+MIT License
