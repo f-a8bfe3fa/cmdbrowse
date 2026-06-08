@@ -11,7 +11,7 @@ static const SearchEngine PRESET_ENGINES[] = {
         .supports_video = true, .supports_news = true, .supports_academic = true,
         .requires_api_key = false, .tier = ENGINE_TIER_GLOBAL,
         .country_code = "", .language_code = "en", .region_tag = "global",
-        .icon = "G", .enabled = true, .priority = 1, .rate_limit_ms = 500
+        .icon = "G", .enabled = false, .priority = 1, .rate_limit_ms = 500
     },
     {
         .name = "bing", .display_name = "Microsoft Bing",
@@ -311,26 +311,37 @@ static const SearchEngine PRESET_ENGINES[] = {
         .icon = "S", .enabled = false, .priority = 60, .rate_limit_ms = 1000
     },
     {
-        .name = "brave_api", .display_name = "Brave Search API",
-        .search_url = "https://api.search.brave.com/res/v1/web/search",
-        .search_url_encoded = "https://api.search.brave.com/res/v1/web/search?q={query}&count={count}&offset={offset}&search_lang={lang}&safesearch={safe}",
-        .query_param = "q", .page_param = "offset", .count_param = "count",
-        .results_per_page = 20, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = true, .api_key_env = "BRAVE_API_KEY", .tier = ENGINE_TIER_GLOBAL,
-        .country_code = "", .language_code = "en", .region_tag = "global",
-        .icon = "B", .enabled = true, .priority = 1, .rate_limit_ms = 200
-    },
-    {
-        .name = "ddg_api", .display_name = "DuckDuckGo API",
-        .search_url = "https://api.duckduckgo.com/",
-        .search_url_encoded = "https://api.duckduckgo.com/?q={query}&format=json",
-        .query_param = "q", .page_param = "", .count_param = "",
+        .name = "tavily", .display_name = "Tavily Search API",
+        .search_url = "https://api.tavily.com/search",
+        .search_url_encoded = "",
+        .query_param = "", .page_param = "", .count_param = "",
         .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
         .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "privacy",
-        .icon = "D", .enabled = true, .priority = 2, .rate_limit_ms = 500
+        .requires_api_key = true, .api_key_env = "TAVILY_API_KEY", .tier = ENGINE_TIER_GLOBAL,
+        .country_code = "", .language_code = "en", .region_tag = "global",
+        .icon = "T", .enabled = true, .priority = 1, .rate_limit_ms = 200
+    },
+    {
+        .name = "google_api", .display_name = "Google Custom Search API",
+        .search_url = "https://www.googleapis.com/customsearch/v1",
+        .search_url_encoded = "https://www.googleapis.com/customsearch/v1?q={query}&key={api_key}&cx={cx}&num={count}&start={offset}&lr=lang_{lang}&safe={safe}",
+        .query_param = "q", .page_param = "start", .count_param = "num",
+        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
+        .supports_video = false, .supports_news = false, .supports_academic = false,
+        .requires_api_key = true, .api_key_env = "GOOGLE_API_KEY", .tier = ENGINE_TIER_GLOBAL,
+        .country_code = "", .language_code = "en", .region_tag = "global",
+        .icon = "G", .enabled = true, .priority = 2, .rate_limit_ms = 300
+    },
+    {
+        .name = "bing_api", .display_name = "Bing Search API",
+        .search_url = "https://api.bing.microsoft.com/v7.0/search",
+        .search_url_encoded = "https://api.bing.microsoft.com/v7.0/search?q={query}&count={count}&offset={offset}&mkt={lang}&safeSearch={safe}",
+        .query_param = "q", .page_param = "offset", .count_param = "count",
+        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
+        .supports_video = false, .supports_news = false, .supports_academic = false,
+        .requires_api_key = true, .api_key_env = "BING_API_KEY", .tier = ENGINE_TIER_GLOBAL,
+        .country_code = "", .language_code = "en", .region_tag = "global",
+        .icon = "B", .enabled = true, .priority = 3, .rate_limit_ms = 300
     },
 };
 
