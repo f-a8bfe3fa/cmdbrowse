@@ -1,5 +1,13 @@
 #include "parser.h"
 #include "utils.h"
+#include <ctype.h>
+
+#ifndef min
+#define min(a,b) ((a)<(b)?(a):(b))
+#endif
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif
 
 char* parser_extract_text_between(const char* haystack, const char* after, const char* before) {
     const char* s = after ? strstr(haystack, after) : haystack;

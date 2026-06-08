@@ -542,8 +542,10 @@ static void command_mode(BrowserContext* ctx, const char* query) {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+#endif
 
     memset(&g_browser, 0, sizeof(g_browser));
     browser_init(&g_browser);
