@@ -1,7 +1,12 @@
 #include "utils.h"
 #include <ctype.h>
 #include <sys/stat.h>
-#include <direct.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
 
 static bool ansi_enabled = true;
 
@@ -236,30 +241,23 @@ void extract_domain(const char* url, char* domain, size_t size) {
 }
 
 int get_terminal_width(void) {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
-        return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0)
+        return ws.ws_col;
     char* cols = getenv("COLUMNS");
     return cols ? atoi(cols) : 80;
 }
 
 int get_terminal_height(void) {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
-        return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0)
+        return ws.ws_row;
     char* rows = getenv("LINES");
     return rows ? atoi(rows) : 24;
 }
 
 void enable_ansi_escapes(void) {
     ansi_enabled = true;
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut == INVALID_HANDLE_VALUE) return;
-    DWORD mode = 0;
-    if (GetConsoleMode(hOut, &mode)) {
-        mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-        SetConsoleMode(hOut, mode);
-    }
 }
 
 void disable_ansi_escapes(void) {
@@ -267,64 +265,52 @@ void disable_ansi_escapes(void) {
 }
 
 bool file_exists(const char* path) {
-    DWORD attr = GetFileAttributesA(path);
-    return (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY));
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
 }
 
 bool dir_exists(const char* path) {
-    DWORD attr = GetFileAttributesA(path);
-    return (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
 int file_size_bytes(const char* path) {
-    HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return -1;
-    DWORD high = 0;
-    DWORD low = GetFileSize(hFile, &high);
-    CloseHandle(hFile);
-    return (int)low;
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    return (int)st.st_size;
 }
 
 char* file_read_all(const char* path, size_t* out_size) {
-    HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return NULL;
-    DWORD high = 0;
-    DWORD low = GetFileSize(hFile, &high);
-    size_t size = ((size_t)high << 32) | low;
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
+    long sz = ftell(f);
+    if (sz < 0) { fclose(f); return NULL; }
+    rewind(f);
+    size_t size = (size_t)sz;
     char* data = (char*)malloc(size + 1);
-    if (!data) { CloseHandle(hFile); return NULL; }
-    DWORD bytes_read = 0;
-    if (!ReadFile(hFile, data, (DWORD)size, &bytes_read, NULL) || bytes_read != size) {
-        free(data); CloseHandle(hFile); return NULL;
-    }
+    if (!data) { fclose(f); return NULL; }
+    size_t read = fread(data, 1, size, f);
+    fclose(f);
+    if (read != size) { free(data); return NULL; }
     data[size] = '\0';
-    CloseHandle(hFile);
     if (out_size) *out_size = size;
     return data;
 }
 
 bool file_write_all(const char* path, const void* data, size_t size) {
-    HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL,
-        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return false;
-    DWORD written = 0;
-    bool ok = WriteFile(hFile, data, (DWORD)size, &written, NULL) && written == size;
-    CloseHandle(hFile);
-    return ok;
+    FILE* f = fopen(path, "wb");
+    if (!f) return false;
+    size_t written = fwrite(data, 1, size, f);
+    fclose(f);
+    return written == size;
 }
 
 bool file_append_line(const char* path, const char* line) {
-    HANDLE hFile = CreateFileA(path, FILE_APPEND_DATA, 0, NULL,
-        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return false;
-    SetFilePointer(hFile, 0, NULL, FILE_END);
-    char nl[2] = { '\n', '\0' };
-    DWORD written = 0;
-    WriteFile(hFile, line, (DWORD)strlen(line), &written, NULL);
-    WriteFile(hFile, nl, 1, &written, NULL);
-    CloseHandle(hFile);
+    FILE* f = fopen(path, "a");
+    if (!f) return false;
+    fprintf(f, "%s\n", line);
+    fclose(f);
     return true;
 }
 
@@ -364,35 +350,38 @@ void free_lines(char** lines, int count) {
 
 char* get_config_dir(void) {
     static char path[MAX_PATH_LENGTH];
-    const char* appdata = getenv("APPDATA");
-    if (appdata) snprintf(path, sizeof(path), "%s\\cmdbrowser", appdata);
-    else snprintf(path, sizeof(path), "%s\\.cmdbrowser", getenv("USERPROFILE") ? getenv("USERPROFILE") : "C:\\Users\\Public");
+    const char* home = getenv("HOME");
+    if (home) snprintf(path, sizeof(path), "%s/.cmdbrowser", home);
+    else snprintf(path, sizeof(path), "/tmp/.cmdbrowser");
     return path;
 }
 
 char* get_cache_dir(void) {
     static char path[MAX_PATH_LENGTH];
-    snprintf(path, sizeof(path), "%s\\cache", get_config_dir());
+    snprintf(path, sizeof(path), "%s/cache", get_config_dir());
     return path;
 }
 
 bool ensure_directory(const char* path) {
     char tmp[MAX_PATH_LENGTH];
     snprintf(tmp, sizeof(tmp), "%s", path);
-    for (char* p = tmp; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            char sep = *p; *p = '\0';
-            if (strlen(tmp) > 2) CreateDirectoryA(tmp, NULL);
-            *p = sep;
+    for (char* p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+                *p = '/';
+                return false;
+            }
+            *p = '/';
         }
     }
-    CreateDirectoryA(tmp, NULL);
-    return dir_exists(path) || CreateDirectoryA(path, NULL) != 0;
+    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) return false;
+    return dir_exists(path);
 }
 
 char* path_join(const char* base, const char* name) {
     static char result[MAX_PATH_LENGTH];
-    snprintf(result, sizeof(result), "%s\\%s", base, name);
+    snprintf(result, sizeof(result), "%s/%s", base, name);
     return result;
 }
 
@@ -403,23 +392,20 @@ int random_int(int min, int max) {
 }
 
 void sleep_ms(int milliseconds) {
-    Sleep((DWORD)milliseconds);
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000L;
+    nanosleep(&ts, NULL);
 }
 
 char* wchar_to_utf8(const wchar_t* wstr) {
-    if (!wstr) return NULL;
-    int needed = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
-    char* buf = (char*)malloc(needed);
-    if (buf) WideCharToMultiByte(CP_UTF8, 0, wstr, -1, buf, needed, NULL, NULL);
-    return buf;
+    (void)wstr;
+    return strdup("");
 }
 
 wchar_t* utf8_to_wchar(const char* str) {
-    if (!str) return NULL;
-    int needed = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
-    wchar_t* buf = (wchar_t*)malloc(needed * sizeof(wchar_t));
-    if (buf) MultiByteToWideChar(CP_UTF8, 0, str, -1, buf, needed);
-    return buf;
+    (void)str;
+    return NULL;
 }
 
 char* json_escape(const char* str) {
@@ -479,9 +465,9 @@ void print_banner(void) {
     printf(COLOR_BRIGHT_CYAN);
     printf("\n");
     print_centered("   ___ __  __ ___  ___                             ", w);
-    print_centered("  / __|  \\/  |   \\| _ ) ___ _ _ ___ ___  ___ _ _  ", w);
-    print_centered(" | (__| |\\/| | |) | _ \\/ _ \\ '_|_ / _ \\/ -_) '_| ", w);
-    print_centered("  \\___|_|  |_|___/|___/\\___/_| /__\\___/\\___|_|   ", w);
+    print_centered("  / __|  \/  |   \| _ ) ___ _ _ ___ ___  ___ _ _  ", w);
+    print_centered(" | (__| |\/| | |) | _ \/ _ \ '_|_ / _ \/ -_) '_| ", w);
+    print_centered("  \___|_|  |_|___/|___/\___/_| /__\___/\___|_|   ", w);
     print_centered("                                                   ", w);
     print_centered("  Command-Line Multi-Engine Web Search Browser v2.0 ", w);
     printf(COLOR_RESET "\n");
@@ -576,4 +562,34 @@ uint8_t* base64_decode(const char* str, size_t* out_length) {
 void xor_cipher(const uint8_t* input, uint8_t* output, size_t length, const char* key) {
     size_t klen = strlen(key);
     for (size_t i = 0; i < length; i++) output[i] = input[i] ^ key[i % klen];
+}
+
+bool load_env_file(const char* path) {
+    if (!file_exists(path)) return false;
+    int count = 0;
+    char** lines = file_read_lines(path, &count);
+    if (!lines) return false;
+    for (int i = 0; i < count; i++) {
+        char* line = lines[i];
+        trim_whitespace(line);
+        if (line[0] == '\0' || line[0] == '#') continue;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* key = line;
+        char* value = eq + 1;
+        trim_whitespace(key);
+        trim_whitespace(value);
+        if (key[0] == '\0') continue;
+        if (value[0] == '"' && value[strlen(value) - 1] == '"') {
+            value[strlen(value) - 1] = '\0';
+            value++;
+        } else if (value[0] == '\'' && value[strlen(value) - 1] == '\'') {
+            value[strlen(value) - 1] = '\0';
+            value++;
+        }
+        setenv(key, value, 1);
+    }
+    free_lines(lines, count);
+    return true;
 }

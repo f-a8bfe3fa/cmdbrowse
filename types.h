@@ -345,7 +345,7 @@ typedef struct {
     int engines_total;
     int engines_failed;
     SearchResponse** responses;
-    CRITICAL_SECTION lock;
+    pthread_mutex_t lock;
 } SearchProgress;
 
 #endif

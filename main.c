@@ -8,6 +8,7 @@
 #include "bookmarks.h"
 #include "cache.h"
 #include "ui.h"
+#include "usage_tracker.h"
 
 static BrowserContext g_browser;
 
@@ -91,6 +92,14 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
         return NULL;
     }
 
+    /* Check usage quota before searching */
+    if (!usage_tracker_can_use(engine_name)) {
+        SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));
+        if (err) { snprintf(err->error_message, sizeof(err->error_message),
+            "Quota exceeded for %s.", engine_name); err->status_code = -1; }
+        return err;
+    }
+
     SearchResponse* cached = NULL;
     if (cache_lookup(ctx, query, engine_name, page, &cached)) {
         return cached;
@@ -122,10 +131,51 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
         snprintf(req.url, sizeof(req.url), "%s", search_url);
     }
 
+    /* Tavily requires POST with JSON body */
+    if (strcmp(engine->name, "tavily") == 0) {
+        req.method = HTTP_POST;
+        http_add_header(&req, "Content-Type", "application/json");
+        char json_body[1024];
+        char encoded_query[MAX_QUERY_LENGTH * 3];
+        url_encode(query, encoded_query, sizeof(encoded_query));
+        snprintf(json_body, sizeof(json_body),
+            "{\"query\":\"%s\",\"max_results\":%d,\"search_depth\":\"basic\",\"include_answer\":false,\"include_raw_content\":false}",
+            query, sq.results_per_page);
+        snprintf(req.body, sizeof(req.body), "%s", json_body);
+        req.body_length = (int)strlen(req.body);
+    }
+
     HttpResponse http_resp;
     http_response_init(&http_resp);
 
-    if (!http_execute(&req, &http_resp)) {
+    bool http_ok = false;
+    if (engine->requires_api_key && engine->api_key_env[0]) {
+        const char* api_key = getenv(engine->api_key_env);
+        if (api_key && api_key[0]) {
+            const char* header_name = "X-Subscription-Token";
+            if (strcmp(engine->name, "bing_api") == 0) {
+                header_name = "Ocp-Apim-Subscription-Key";
+                http_ok = http_execute_with_api_key(&req, &http_resp, header_name, api_key);
+            } else if (strcmp(engine->name, "tavily") == 0) {
+                header_name = "Authorization";
+                char bearer[1024];
+                snprintf(bearer, sizeof(bearer), "Bearer %s", api_key);
+                http_ok = http_execute_with_api_key(&req, &http_resp, header_name, bearer);
+            } else {
+                http_ok = http_execute_with_api_key(&req, &http_resp, header_name, api_key);
+            }
+        } else {
+            http_response_free(&http_resp);
+            SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));
+            if (err) { snprintf(err->error_message, sizeof(err->error_message),
+                "API key not set. Set %s environment variable.", engine->api_key_env); err->status_code = -1; }
+            return err;
+        }
+    } else {
+        http_ok = http_execute(&req, &http_resp);
+    }
+
+    if (!http_ok) {
         http_response_free(&http_resp);
         SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));
         if (err) { snprintf(err->error_message, sizeof(err->error_message), "Network error"); err->status_code = -1; }
@@ -139,7 +189,9 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
     SearchResponse* resp = parser_parse_response(engine, &sq, &http_resp);
     http_response_free(&http_resp);
 
-    if (resp && resp->result_count > 0) {
+    /* Record successful API call in usage tracker */
+    if (resp && resp->status_code >= 200 && resp->status_code < 400 && resp->result_count > 0) {
+        usage_tracker_record_call(engine_name);
         if (sq.deduplicate) {
             resp->result_count = parser_dedup_results(resp->results, resp->result_count);
         }
@@ -167,6 +219,10 @@ static SearchResponse* do_multi_search(BrowserContext* ctx, const char* query, i
     int r_idx = 0;
     for (int i = 0; i < ctx->engine_count && r_idx < enabled_count; i++) {
         if (ctx->engines[i].enabled) {
+            /* Skip engines that have exceeded their quota */
+            if (!usage_tracker_can_use(ctx->engines[i].name)) {
+                continue;
+            }
             ui_render_info("Searching engine...");
             SearchResponse* r = do_search(ctx, query, ctx->engines[i].name, page);
             if (r && r->result_count > 0) {
@@ -347,6 +403,8 @@ static void handle_command(BrowserContext* ctx, char* input) {
                 ui_render_success("Engine removed.");
             else
                 ui_render_error("Engine not found or cannot remove preset engine.");
+        } else if (strcmp(argc[1], "usage") == 0) {
+            usage_tracker_print_stats();
         } else {
             ui_render_engine_list(ctx);
         }
@@ -542,11 +600,22 @@ static void command_mode(BrowserContext* ctx, const char* query) {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+#endif
+
+    /* Load environment variables from .env file if present */
+    char env_path[MAX_PATH_LENGTH];
+    snprintf(env_path, sizeof(env_path), "%s/.env", get_config_dir());
+    if (!load_env_file(env_path)) {
+        /* Also try current directory */
+        load_env_file(".env");
+    }
 
     memset(&g_browser, 0, sizeof(g_browser));
     browser_init(&g_browser);
+    usage_tracker_init();
 
     if (!http_init()) {
         fprintf(stderr, "ERROR: Failed to initialize HTTP subsystem.\n");
@@ -578,6 +647,7 @@ int main(int argc, char* argv[]) {
     }
 
     browser_save_all(&g_browser);
+    usage_tracker_shutdown();
     http_cleanup();
 
     free(g_browser.config.sections);

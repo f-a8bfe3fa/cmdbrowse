@@ -1,31 +1,36 @@
 #include "http.h"
 #include "utils.h"
+#include <curl/curl.h>
+#include <sys/time.h>
 
-static char g_user_agent[256] = "CMDBrowser/2.0 (Windows; CLI Search Client)";
-static HINTERNET g_hSession = NULL;
+static char g_user_agent[256] = "CMDBrowser/2.0 (Linux; CLI Search Client)";
+static bool g_curl_initialized = false;
+
+typedef struct {
+    ByteBuffer* buf;
+} WriteCallbackCtx;
+
+static size_t write_callback(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    size_t total = size * nmemb;
+    WriteCallbackCtx* ctx = (WriteCallbackCtx*)userdata;
+    if (ctx && ctx->buf) {
+        byte_buffer_append(ctx->buf, ptr, total);
+    }
+    return total;
+}
 
 bool http_init(void) {
-    wchar_t* wua = utf8_to_wchar(g_user_agent);
-    if (!wua) return false;
-    g_hSession = WinHttpOpen(
-        wua,
-        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-        WINHTTP_NO_PROXY_NAME,
-        WINHTTP_NO_PROXY_BYPASS,
-        0
-    );
-    if (!g_hSession && GetLastError() == ERROR_WINHTTP_SECURE_FAILURE) {
-        g_hSession = WinHttpOpen(wua,
-            WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-            WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
-            WINHTTP_FLAG_SECURE_PROTOCOL_ALL);
-    }
-    free(wua);
-    return g_hSession != NULL;
+    if (g_curl_initialized) return true;
+    CURLcode res = curl_global_init(CURL_GLOBAL_DEFAULT);
+    g_curl_initialized = (res == CURLE_OK);
+    return g_curl_initialized;
 }
 
 void http_cleanup(void) {
-    if (g_hSession) { WinHttpCloseHandle(g_hSession); g_hSession = NULL; }
+    if (g_curl_initialized) {
+        curl_global_cleanup();
+        g_curl_initialized = false;
+    }
 }
 
 void http_set_user_agent(const char* ua) {
@@ -116,170 +121,107 @@ char* http_build_request_string(HttpRequest* req) {
     return buf;
 }
 
-static bool http_winhttp_execute(HttpRequest* req, HttpResponse* resp) {
-    LARGE_INTEGER freq, start, end;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&start);
+static bool http_curl_execute(HttpRequest* req, HttpResponse* resp) {
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
 
-    wchar_t* whost = utf8_to_wchar(req->host);
-    wchar_t* wpath = utf8_to_wchar(req->path);
-    if (!whost || !wpath) { free(whost); free(wpath); return false; }
+    CURL* curl = curl_easy_init();
+    if (!curl) return false;
 
-    HINTERNET hConnect = WinHttpConnect(g_hSession, whost,
-        (INTERNET_PORT)(req->port > 0 ? req->port : (req->use_ssl ? 443 : 80)), 0);
-    free(whost);
-    if (!hConnect) { free(wpath); return false; }
+    curl_easy_setopt(curl, CURLOPT_URL, req->url);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_user_agent);
 
-    DWORD flags = req->use_ssl ? WINHTTP_FLAG_SECURE : 0;
-    static const wchar_t* methods[] = { L"GET", L"POST", L"HEAD", L"PUT", L"DELETE" };
-    HINTERNET hRequest = WinHttpOpenRequest(hConnect, methods[req->method], wpath,
-        NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
-    free(wpath);
-    if (!hRequest) { WinHttpCloseHandle(hConnect); return false; }
-
-    if (req->use_ssl) {
-        DWORD sec_flags = 0;
-        WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &sec_flags, sizeof(sec_flags));
+    switch (req->method) {
+        case HTTP_GET:    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L); break;
+        case HTTP_POST:   curl_easy_setopt(curl, CURLOPT_POST, 1L); break;
+        case HTTP_HEAD:   curl_easy_setopt(curl, CURLOPT_NOBODY, 1L); break;
+        case HTTP_PUT:    curl_easy_setopt(curl, CURLOPT_UPLOAD, 0L); curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT"); break;
+        case HTTP_DELETE: curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE"); break;
+        default: break;
     }
 
-    WinHttpSetTimeouts(hRequest, req->timeout_ms, req->timeout_ms, req->timeout_ms, req->timeout_ms);
+    if (req->body_length > 0) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req->body);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)req->body_length);
+    }
 
-    if (!req->follow_redirects) {
-        DWORD disable_redirects = WINHTTP_DISABLE_REDIRECTS;
-        WinHttpSetOption(hRequest, WINHTTP_OPTION_DISABLE_FEATURE, &disable_redirects, sizeof(disable_redirects));
+    struct curl_slist* header_list = NULL;
+    if (req->header_count > 0) {
+        for (int i = 0; i < req->header_count; i++) {
+            char header_line[1281];
+            snprintf(header_line, sizeof(header_line), "%s: %s", req->headers[i].key, req->headers[i].value);
+            header_list = curl_slist_append(header_list, header_line);
+        }
+        if (header_list) {
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
+        }
     }
 
     if (strlen(req->proxy) > 0) {
-        wchar_t* wproxy = utf8_to_wchar(req->proxy);
-        if (wproxy) {
-            WINHTTP_PROXY_INFO proxyInfo = { WINHTTP_ACCESS_TYPE_NAMED_PROXY, wproxy, NULL };
-            WinHttpSetOption(hRequest, WINHTTP_OPTION_PROXY, &proxyInfo, sizeof(proxyInfo));
-            free(wproxy);
-        }
+        curl_easy_setopt(curl, CURLOPT_PROXY, req->proxy);
     }
 
-    if (req->header_count > 0) {
-        char headers_buf[8192] = {0};
-        int pos = 0;
-        for (int i = 0; i < req->header_count; i++) {
-            pos += snprintf(headers_buf + pos, sizeof(headers_buf) - pos,
-                "%s: %s\r\n", req->headers[i].key, req->headers[i].value);
-        }
-        wchar_t* wheaders = utf8_to_wchar(headers_buf);
-        if (wheaders) {
-            WinHttpAddRequestHeaders(hRequest, wheaders, (DWORD)-1, WINHTTP_ADDREQ_FLAG_ADD);
-            free(wheaders);
-        }
-    }
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, req->follow_redirects ? 1L : 0L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, (long)req->timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, (long)req->timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
-    bool send_ok = false;
-    if (req->body_length > 0) {
-        send_ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-            (LPVOID)req->body, (DWORD)req->body_length, (DWORD)req->body_length, 0);
-    } else {
-        send_ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-            WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
-    }
-
-    if (!send_ok) { WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); return false; }
-
-    if (!WinHttpReceiveResponse(hRequest, NULL)) {
-        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); return false;
-    }
-
-    DWORD status_code = 0, status_code_size = sizeof(status_code);
-    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-        WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_code_size, WINHTTP_NO_HEADER_INDEX);
-    resp->status_code = (int)status_code;
-
-    wchar_t wstatus_text[128];
-    DWORD st_size = sizeof(wstatus_text);
-    if (WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_TEXT,
-        WINHTTP_HEADER_NAME_BY_INDEX, wstatus_text, &st_size, WINHTTP_NO_HEADER_INDEX)) {
-        char* st = wchar_to_utf8(wstatus_text);
-        if (st) { snprintf(resp->status_text, sizeof(resp->status_text), "%s", st); free(st); }
-    }
-
-    wchar_t* raw_headers = NULL;
-    DWORD raw_header_size = 0;
-    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_RAW_HEADERS_CRLF,
-        WINHTTP_HEADER_NAME_BY_INDEX, NULL, &raw_header_size, WINHTTP_NO_HEADER_INDEX);
-    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && raw_header_size > 0) {
-        raw_headers = (wchar_t*)malloc(raw_header_size);
-        if (raw_headers && WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_RAW_HEADERS_CRLF,
-            WINHTTP_HEADER_NAME_BY_INDEX, raw_headers, &raw_header_size, WINHTTP_NO_HEADER_INDEX)) {
-            char* hr = wchar_to_utf8(raw_headers);
-            if (hr) {
-                char* line = strtok(hr, "\r\n");
-                int h_idx = 0;
-                while (line && h_idx < MAX_HEADERS) {
-                    if (strchr(line, ':')) {
-                        char* colon = strchr(line, ':');
-                        size_t klen = (size_t)(colon - line);
-                        if (klen < sizeof(resp->headers[0].key)) {
-                            memcpy(resp->headers[h_idx].key, line, klen);
-                            resp->headers[h_idx].key[klen] = '\0';
-                        }
-                        const char* val = colon + 1;
-                        while (*val == ' ') val++;
-                        snprintf(resp->headers[h_idx].value, sizeof(resp->headers[0].value), "%s", val);
-                        h_idx++;
-                    }
-                    line = strtok(NULL, "\r\n");
-                }
-                resp->header_count = h_idx;
-                free(hr);
-            }
-        }
-        free(raw_headers);
-    }
-
-    DWORD available = 0;
     ByteBuffer body_buf;
     byte_buffer_init(&body_buf);
+    WriteCallbackCtx ctx = { &body_buf };
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
 
-    while (WinHttpQueryDataAvailable(hRequest, &available) && available > 0) {
-        if (available > HTTP_BUFFER_SIZE) available = HTTP_BUFFER_SIZE;
-        char* chunk = (char*)malloc(available + 1);
-        if (!chunk) break;
-        DWORD bytes_read = 0;
-        if (WinHttpReadData(hRequest, chunk, available, &bytes_read)) {
-            if (bytes_read > 0) bytes_read = min(bytes_read, available);
-            byte_buffer_append(&body_buf, chunk, bytes_read);
+    CURLcode res = curl_easy_perform(curl);
+
+    if (res == CURLE_OK) {
+        long status_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        resp->status_code = (int)status_code;
+
+        char* effective_url = NULL;
+        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effective_url);
+        if (effective_url) {
+            snprintf(resp->effective_url, sizeof(resp->effective_url), "%s", effective_url);
         }
-        free(chunk);
-        if (bytes_read == 0) break;
-        available = 0;
+
+        resp->body = body_buf.data;
+        resp->body_length = body_buf.length;
+        resp->body_capacity = body_buf.capacity;
+    } else {
+        byte_buffer_free(&body_buf);
+        resp->status_code = 0;
     }
 
-    resp->body = body_buf.data;
-    resp->body_length = body_buf.length;
-    resp->body_capacity = body_buf.capacity;
+    if (header_list) curl_slist_free_all(header_list);
+    curl_easy_cleanup(curl);
 
-    QueryPerformanceCounter(&end);
-    resp->elapsed_seconds = (double)(end.QuadPart - start.QuadPart) / freq.QuadPart;
+    gettimeofday(&end, NULL);
+    resp->elapsed_seconds = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_usec - start.tv_usec) / 1000000.0;
 
-    int scheme_len = snprintf(resp->effective_url, sizeof(resp->effective_url),
-        "%s://", req->use_ssl ? "https" : "http");
-    if (scheme_len < 0) scheme_len = 0;
-    if (scheme_len < (int)sizeof(resp->effective_url)) {
-        snprintf(resp->effective_url + scheme_len, sizeof(resp->effective_url) - scheme_len,
-            "%s%s", req->host, req->path);
-    }
-
-    WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
     return resp->status_code > 0;
 }
 
-bool http_execute(HttpRequest* req, HttpResponse* resp) {
-    if (!g_hSession) {
+static bool http_do_execute(HttpRequest* req, HttpResponse* resp) {
+    if (!g_curl_initialized) {
         if (!http_init()) return false;
     }
     if (!http_parse_url(req->url, req->host, sizeof(req->host), &req->port, req->path, sizeof(req->path), &req->use_ssl)) {
         if (!req->port) req->port = 80;
     }
-    return http_winhttp_execute(req, resp);
+    return http_curl_execute(req, resp);
+}
+
+bool http_execute(HttpRequest* req, HttpResponse* resp) {
+    return http_do_execute(req, resp);
+}
+
+bool http_execute_with_api_key(HttpRequest* req, HttpResponse* resp, const char* api_key_header_name, const char* api_key) {
+    if (api_key_header_name && api_key && api_key_header_name[0] && api_key[0]) {
+        http_add_header(req, api_key_header_name, api_key);
+    }
+    return http_do_execute(req, resp);
 }
 
 void http_response_free(HttpResponse* resp) {

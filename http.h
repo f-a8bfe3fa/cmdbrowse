@@ -6,6 +6,7 @@
 bool http_init(void);
 void http_cleanup(void);
 bool http_execute(HttpRequest* req, HttpResponse* resp);
+bool http_execute_with_api_key(HttpRequest* req, HttpResponse* resp, const char* api_key_header_name, const char* api_key);
 void http_response_free(HttpResponse* resp);
 bool http_download_file(const char* url, const char* output_path, const char* proxy, int timeout_ms);
 char* http_quick_get(const char* url, const char* proxy, int timeout_ms);
