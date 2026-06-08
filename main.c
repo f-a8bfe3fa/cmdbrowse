@@ -605,6 +605,14 @@ int main(int argc, char* argv[]) {
     SetConsoleCP(CP_UTF8);
 #endif
 
+    /* Load environment variables from .env file if present */
+    char env_path[MAX_PATH_LENGTH];
+    snprintf(env_path, sizeof(env_path), "%s/.env", get_config_dir());
+    if (!load_env_file(env_path)) {
+        /* Also try current directory */
+        load_env_file(".env");
+    }
+
     memset(&g_browser, 0, sizeof(g_browser));
     browser_init(&g_browser);
     usage_tracker_init();

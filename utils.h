@@ -54,5 +54,6 @@ int  levenshtein_distance(const char* s1, const char* s2);
 char* base64_encode(const uint8_t* data, size_t length);
 uint8_t* base64_decode(const char* str, size_t* out_length);
 void xor_cipher(const uint8_t* input, uint8_t* output, size_t length, const char* key);
+bool load_env_file(const char* path);
 
 #endif

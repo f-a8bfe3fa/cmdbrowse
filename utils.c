@@ -563,3 +563,33 @@ void xor_cipher(const uint8_t* input, uint8_t* output, size_t length, const char
     size_t klen = strlen(key);
     for (size_t i = 0; i < length; i++) output[i] = input[i] ^ key[i % klen];
 }
+
+bool load_env_file(const char* path) {
+    if (!file_exists(path)) return false;
+    int count = 0;
+    char** lines = file_read_lines(path, &count);
+    if (!lines) return false;
+    for (int i = 0; i < count; i++) {
+        char* line = lines[i];
+        trim_whitespace(line);
+        if (line[0] == '\0' || line[0] == '#') continue;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* key = line;
+        char* value = eq + 1;
+        trim_whitespace(key);
+        trim_whitespace(value);
+        if (key[0] == '\0') continue;
+        if (value[0] == '"' && value[strlen(value) - 1] == '"') {
+            value[strlen(value) - 1] = '\0';
+            value++;
+        } else if (value[0] == '\'' && value[strlen(value) - 1] == '\'') {
+            value[strlen(value) - 1] = '\0';
+            value++;
+        }
+        setenv(key, value, 1);
+    }
+    free_lines(lines, count);
+    return true;
+}

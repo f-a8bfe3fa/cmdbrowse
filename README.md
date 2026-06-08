@@ -47,7 +47,25 @@ make
 
 ## 配置 API 密钥
 
-项目通过环境变量读取 API 密钥：
+项目通过环境变量读取 API 密钥。推荐方式是在 `~/.cmdbrowser/.env` 或项目目录的 `.env` 文件中配置，启动时自动加载。
+
+### 方法 1：.env 文件（推荐）
+
+创建 `~/.cmdbrowser/.env`：
+
+```bash
+mkdir -p ~/.cmdbrowser
+cat > ~/.cmdbrowser/.env << 'EOF'
+TAVILY_API_KEY=your_tavily_key
+BING_API_KEY=your_bing_key
+GOOGLE_API_KEY=your_google_key
+GOOGLE_SEARCH_CX=your_google_cx
+EOF
+```
+
+程序启动时会自动读取该文件。也支持在项目目录下放一个 `.env` 文件作为备用。
+
+### 方法 2：环境变量
 
 ```bash
 export TAVILY_API_KEY="your_tavily_key"
@@ -56,7 +74,7 @@ export GOOGLE_API_KEY="your_google_key"
 export GOOGLE_SEARCH_CX="your_google_cx"
 ```
 
-建议添加到 `~/.bashrc` 或 `~/.zshrc`。
+建议添加到 `~/.bashrc` 或 `~/.zshrc` 永久生效。
 
 | 引擎 | 环境变量 | 限额（默认） | 说明 |
 |:---|:---|:---|:---|
