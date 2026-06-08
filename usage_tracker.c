@@ -57,8 +57,11 @@ void usage_tracker_init(void) {
     g_initialized = true;
 
     /* Default quotas matching user's requirements */
+    /* Tavily: monthly 1000 (no daily limit), also track daily for visibility */
     usage_tracker_set_quota("tavily", 0, 1000);
+    /* Bing API: monthly 1000 (no daily limit), also track daily for visibility */
     usage_tracker_set_quota("bing_api", 0, 1000);
+    /* Google Custom Search: daily 100 (no monthly limit) */
     usage_tracker_set_quota("google_api", 100, 0);
 
     usage_tracker_load();
