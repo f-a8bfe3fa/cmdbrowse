@@ -129,7 +129,18 @@ static SearchResponse* do_search(BrowserContext* ctx, const char* query, const c
     if (engine->requires_api_key && engine->api_key_env[0]) {
         const char* api_key = getenv(engine->api_key_env);
         if (api_key && api_key[0]) {
-            http_ok = http_execute_with_api_key(&req, &http_resp, "X-Subscription-Token", api_key);
+            const char* header_name = "X-Subscription-Token";
+            if (strcmp(engine->name, "bing_api") == 0) {
+                header_name = "Ocp-Apim-Subscription-Key";
+                http_ok = http_execute_with_api_key(&req, &http_resp, header_name, api_key);
+            } else if (strcmp(engine->name, "tavily") == 0) {
+                header_name = "Authorization";
+                char bearer[1024];
+                snprintf(bearer, sizeof(bearer), "Bearer %s", api_key);
+                http_ok = http_execute_with_api_key(&req, &http_resp, header_name, bearer);
+            } else {
+                http_ok = http_execute_with_api_key(&req, &http_resp, header_name, api_key);
+            }
         } else {
             http_response_free(&http_resp);
             SearchResponse* err = (SearchResponse*)calloc(1, sizeof(SearchResponse));

@@ -219,14 +219,7 @@ bool http_execute(HttpRequest* req, HttpResponse* resp) {
 
 bool http_execute_with_api_key(HttpRequest* req, HttpResponse* resp, const char* api_key_header_name, const char* api_key) {
     if (api_key_header_name && api_key && api_key_header_name[0] && api_key[0]) {
-        char header_line[1024];
-        snprintf(header_line, sizeof(header_line), "%s: %s", api_key_header_name, api_key);
-        char* colon = strchr(header_line, ':');
-        if (colon) {
-            *colon = '\0';
-            http_add_header(req, header_line, colon + 2);
-            *colon = ':';
-        }
+        http_add_header(req, api_key_header_name, api_key);
     }
     return http_do_execute(req, resp);
 }

@@ -3,334 +3,37 @@
 
 static const SearchEngine PRESET_ENGINES[] = {
     {
-        .name = "google", .display_name = "Google",
-        .search_url = "https://www.google.com/search",
-        .search_url_encoded = "https://www.google.com/search?q={query}&start={offset}&num={count}&hl={lang}&safe={safe}",
-        .query_param = "q", .page_param = "start", .count_param = "num",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = true,
-        .requires_api_key = false, .tier = ENGINE_TIER_GLOBAL,
+        .name = "tavily", .display_name = "Tavily Search",
+        .search_url = "https://api.tavily.com/search",
+        .search_url_encoded = "https://api.tavily.com/search?q={query}&max_results={count}&search_depth=basic&include_answer=false&include_raw_content=false",
+        .query_param = "q", .page_param = "", .count_param = "max_results",
+        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
+        .supports_video = false, .supports_news = false, .supports_academic = false,
+        .requires_api_key = true, .api_key_env = "TAVILY_API_KEY", .tier = ENGINE_TIER_GLOBAL,
         .country_code = "", .language_code = "en", .region_tag = "global",
-        .icon = "G", .enabled = true, .priority = 1, .rate_limit_ms = 500
+        .icon = "T", .enabled = true, .priority = 1, .rate_limit_ms = 200
     },
     {
-        .name = "bing", .display_name = "Microsoft Bing",
-        .search_url = "https://www.bing.com/search",
-        .search_url_encoded = "https://www.bing.com/search?q={query}&first={offset}&count={count}&setlang={lang}",
-        .query_param = "q", .page_param = "first", .count_param = "count",
-        .results_per_page = 15, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_GLOBAL,
-        .country_code = "", .language_code = "en", .region_tag = "global",
-        .icon = "B", .enabled = true, .priority = 2, .rate_limit_ms = 500
-    },
-    {
-        .name = "duckduckgo", .display_name = "DuckDuckGo",
-        .search_url = "https://html.duckduckgo.com/html/",
-        .search_url_encoded = "https://html.duckduckgo.com/html/?q={query}&s={offset}&dc={count}&kl={lang}",
-        .query_param = "q", .page_param = "s", .count_param = "dc",
-        .results_per_page = 25, .supports_suggestions = false, .supports_images = true,
-        .supports_video = false, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "privacy",
-        .icon = "D", .enabled = true, .priority = 3, .rate_limit_ms = 1000
-    },
-    {
-        .name = "yahoo", .display_name = "Yahoo! Search",
-        .search_url = "https://search.yahoo.com/search",
-        .search_url_encoded = "https://search.yahoo.com/search?p={query}&b={offset}&n={count}&vl={lang}",
-        .query_param = "p", .page_param = "b", .count_param = "n",
-        .results_per_page = 15, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_GLOBAL,
-        .country_code = "", .language_code = "en", .region_tag = "americas",
-        .icon = "Y", .enabled = true, .priority = 5, .rate_limit_ms = 500
-    },
-    {
-        .name = "baidu", .display_name = "Baidu",
-        .search_url = "https://www.baidu.com/s",
-        .search_url_encoded = "https://www.baidu.com/s?wd={query}&pn={offset}&rn={count}",
-        .query_param = "wd", .page_param = "pn", .count_param = "rn",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = true,
-        .requires_api_key = false, .tier = ENGINE_TIER_REGIONAL,
-        .country_code = "cn", .language_code = "zh", .region_tag = "china",
-        .icon = "B", .enabled = false, .priority = 40, .rate_limit_ms = 1000
-    },
-    {
-        .name = "yandex", .display_name = "Yandex",
-        .search_url = "https://yandex.com/search/",
-        .search_url_encoded = "https://yandex.com/search/?text={query}&p={page}&numdoc={count}&lang={lang}",
-        .query_param = "text", .page_param = "p", .count_param = "numdoc",
-        .results_per_page = 15, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_REGIONAL,
-        .country_code = "ru", .language_code = "en", .region_tag = "russia",
-        .icon = "Y", .enabled = false, .priority = 30, .rate_limit_ms = 1000
-    },
-    {
-        .name = "ecosia", .display_name = "Ecosia",
-        .search_url = "https://www.ecosia.org/search",
-        .search_url_encoded = "https://www.ecosia.org/search?q={query}&p={page}",
-        .query_param = "q", .page_param = "p", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "eco",
-        .icon = "E", .enabled = false, .priority = 20, .rate_limit_ms = 1000
-    },
-    {
-        .name = "startpage", .display_name = "Startpage",
-        .search_url = "https://www.startpage.com/sp/search",
-        .search_url_encoded = "https://www.startpage.com/sp/search?query={query}&page={page}&num={count}&language={lang}",
-        .query_param = "query", .page_param = "page", .count_param = "num",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = true,
-        .supports_video = true, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "privacy",
-        .icon = "S", .enabled = false, .priority = 15, .rate_limit_ms = 1500
-    },
-    {
-        .name = "brave", .display_name = "Brave Search",
-        .search_url = "https://search.brave.com/search",
-        .search_url_encoded = "https://search.brave.com/search?q={query}&offset={offset}&count={count}",
+        .name = "bing_api", .display_name = "Bing Search API",
+        .search_url = "https://api.bing.microsoft.com/v7.0/search",
+        .search_url_encoded = "https://api.bing.microsoft.com/v7.0/search?q={query}&count={count}&offset={offset}&mkt={lang}&safesearch={safe}",
         .query_param = "q", .page_param = "offset", .count_param = "count",
-        .results_per_page = 20, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "privacy",
-        .icon = "B", .enabled = false, .priority = 10, .rate_limit_ms = 1000
-    },
-    {
-        .name = "searx", .display_name = "SearXNG (Meta)",
-        .search_url = "https://searx.be/search",
-        .search_url_encoded = "https://searx.be/search?q={query}&pageno={page}&categories=general&language={lang}",
-        .query_param = "q", .page_param = "pageno", .count_param = "",
-        .results_per_page = 15, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = true,
-        .requires_api_key = false, .tier = ENGINE_TIER_META,
-        .country_code = "", .language_code = "en", .region_tag = "meta",
-        .icon = "S", .enabled = false, .priority = 6, .rate_limit_ms = 1500
-    },
-    {
-        .name = "swisscows", .display_name = "Swisscows",
-        .search_url = "https://swisscows.com/web",
-        .search_url_encoded = "https://swisscows.com/web?query={query}&offset={offset}&items={count}",
-        .query_param = "query", .page_param = "offset", .count_param = "items",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "privacy",
-        .icon = "S", .enabled = false, .priority = 35, .rate_limit_ms = 1000
-    },
-    {
-        .name = "mojeek", .display_name = "Mojeek",
-        .search_url = "https://www.mojeek.com/search",
-        .search_url_encoded = "https://www.mojeek.com/search?q={query}&s={offset}&sc={count}&l={lang}",
-        .query_param = "q", .page_param = "s", .count_param = "sc",
-        .results_per_page = 20, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "independent",
-        .icon = "M", .enabled = false, .priority = 25, .rate_limit_ms = 1500
-    },
-    {
-        .name = "ask", .display_name = "Ask.com",
-        .search_url = "https://www.ask.com/web",
-        .search_url_encoded = "https://www.ask.com/web?q={query}&page={page}&qsrc=0",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_LEGACY,
-        .country_code = "", .language_code = "en", .region_tag = "legacy",
-        .icon = "A", .enabled = false, .priority = 50, .rate_limit_ms = 1000
-    },
-    {
-        .name = "aol", .display_name = "AOL Search",
-        .search_url = "https://search.aol.com/aol/search",
-        .search_url_encoded = "https://search.aol.com/aol/search?q={query}&b={offset}&pz={count}",
-        .query_param = "q", .page_param = "b", .count_param = "pz",
-        .results_per_page = 15, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_LEGACY,
-        .country_code = "", .language_code = "en", .region_tag = "legacy",
-        .icon = "A", .enabled = false, .priority = 55, .rate_limit_ms = 1000
-    },
-    {
-        .name = "lycos", .display_name = "Lycos",
-        .search_url = "https://search.lycos.com/web/",
-        .search_url_encoded = "https://search.lycos.com/web/?q={query}&keyvol=4&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
         .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
         .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_LEGACY,
-        .country_code = "", .language_code = "en", .region_tag = "legacy",
-        .icon = "L", .enabled = false, .priority = 60, .rate_limit_ms = 1000
+        .requires_api_key = true, .api_key_env = "BING_API_KEY", .tier = ENGINE_TIER_GLOBAL,
+        .country_code = "", .language_code = "en-US", .region_tag = "global",
+        .icon = "B", .enabled = true, .priority = 2, .rate_limit_ms = 300
     },
     {
-        .name = "gibiru", .display_name = "Gibiru",
-        .search_url = "https://gibiru.com/results.html",
-        .search_url_encoded = "https://gibiru.com/results.html?q={query}",
-        .query_param = "q", .page_param = "", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "uncensored",
-        .icon = "G", .enabled = false, .priority = 45, .rate_limit_ms = 1500
-    },
-    {
-        .name = "qwant", .display_name = "Qwant",
-        .search_url = "https://www.qwant.com/",
-        .search_url_encoded = "https://www.qwant.com/?q={query}&t=web&p={offset}&language={lang}",
-        .query_param = "q", .page_param = "p", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "fr", .language_code = "en", .region_tag = "privacy",
-        .icon = "Q", .enabled = false, .priority = 15, .rate_limit_ms = 1000
-    },
-    {
-        .name = "scholar", .display_name = "Google Scholar",
-        .search_url = "https://scholar.google.com/scholar",
-        .search_url_encoded = "https://scholar.google.com/scholar?q={query}&start={offset}&num={count}&hl={lang}",
+        .name = "google_api", .display_name = "Google Custom Search",
+        .search_url = "https://www.googleapis.com/customsearch/v1",
+        .search_url_encoded = "https://www.googleapis.com/customsearch/v1?q={query}&num={count}&start={offset}&hl={lang}&safe={safe}&cx={cx}&key={key}",
         .query_param = "q", .page_param = "start", .count_param = "num",
         .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = true,
-        .requires_api_key = false, .tier = ENGINE_TIER_ACADEMIC,
-        .country_code = "", .language_code = "en", .region_tag = "scholarly",
-        .icon = "S", .enabled = false, .priority = 12, .rate_limit_ms = 2000
-    },
-    {
-        .name = "naver", .display_name = "Naver (Korea)",
-        .search_url = "https://search.naver.com/search.naver",
-        .search_url_encoded = "https://search.naver.com/search.naver?query={query}&where=web&start={offset}",
-        .query_param = "query", .page_param = "start", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_REGIONAL,
-        .country_code = "kr", .language_code = "ko", .region_tag = "korea",
-        .icon = "N", .enabled = false, .priority = 35, .rate_limit_ms = 1000
-    },
-    {
-        .name = "seznam", .display_name = "Seznam (Czech)",
-        .search_url = "https://search.seznam.cz/",
-        .search_url_encoded = "https://search.seznam.cz/?q={query}&count={count}&from={offset}",
-        .query_param = "q", .page_param = "from", .count_param = "count",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
         .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_REGIONAL,
-        .country_code = "cz", .language_code = "cs", .region_tag = "czech",
-        .icon = "S", .enabled = false, .priority = 40, .rate_limit_ms = 1000
-    },
-    {
-        .name = "sogou", .display_name = "Sogou (China)",
-        .search_url = "https://www.sogou.com/web",
-        .search_url_encoded = "https://www.sogou.com/web?query={query}&page={page}&num={count}",
-        .query_param = "query", .page_param = "page", .count_param = "num",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_REGIONAL,
-        .country_code = "cn", .language_code = "zh", .region_tag = "china",
-        .icon = "S", .enabled = false, .priority = 45, .rate_limit_ms = 1000
-    },
-    {
-        .name = "mailru", .display_name = "Mail.ru (Russia)",
-        .search_url = "https://go.mail.ru/search",
-        .search_url_encoded = "https://go.mail.ru/search?q={query}&offset={offset}&count={count}",
-        .query_param = "q", .page_param = "offset", .count_param = "count",
-        .results_per_page = 10, .supports_suggestions = true, .supports_images = true,
-        .supports_video = true, .supports_news = true, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_REGIONAL,
-        .country_code = "ru", .language_code = "ru", .region_tag = "russia",
-        .icon = "M", .enabled = false, .priority = 40, .rate_limit_ms = 1000
-    },
-    {
-        .name = "dogpile", .display_name = "Dogpile (Meta)",
-        .search_url = "https://www.dogpile.com/serp",
-        .search_url_encoded = "https://www.dogpile.com/serp?q={query}&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_META,
-        .country_code = "", .language_code = "en", .region_tag = "meta",
-        .icon = "D", .enabled = false, .priority = 50, .rate_limit_ms = 1500
-    },
-    {
-        .name = "webcrawler", .display_name = "WebCrawler (Meta)",
-        .search_url = "https://www.webcrawler.com/serp",
-        .search_url_encoded = "https://www.webcrawler.com/serp?q={query}&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_META,
-        .country_code = "", .language_code = "en", .region_tag = "meta",
-        .icon = "W", .enabled = false, .priority = 55, .rate_limit_ms = 1500
-    },
-    {
-        .name = "excite", .display_name = "Excite",
-        .search_url = "https://results.excite.com/serp",
-        .search_url_encoded = "https://results.excite.com/serp?q={query}&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_LEGACY,
-        .country_code = "", .language_code = "en", .region_tag = "legacy",
-        .icon = "E", .enabled = false, .priority = 60, .rate_limit_ms = 1000
-    },
-    {
-        .name = "metacrawler", .display_name = "MetaCrawler (Meta)",
-        .search_url = "https://www.metacrawler.com/serp",
-        .search_url_encoded = "https://www.metacrawler.com/serp?q={query}&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_META,
-        .country_code = "", .language_code = "en", .region_tag = "meta",
-        .icon = "M", .enabled = false, .priority = 55, .rate_limit_ms = 1500
-    },
-    {
-        .name = "givewater", .display_name = "GiveWater",
-        .search_url = "https://search.givewater.com/serp",
-        .search_url_encoded = "https://search.givewater.com/serp?q={query}&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "charity",
-        .icon = "W", .enabled = false, .priority = 45, .rate_limit_ms = 1000
-    },
-    {
-        .name = "searchalot", .display_name = "Searchalot",
-        .search_url = "https://www.searchalot.com/results.aspx",
-        .search_url_encoded = "https://www.searchalot.com/results.aspx?q={query}&page={page}",
-        .query_param = "q", .page_param = "page", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_LEGACY,
-        .country_code = "", .language_code = "en", .region_tag = "legacy",
-        .icon = "S", .enabled = false, .priority = 60, .rate_limit_ms = 1000
-    },
-    {
-        .name = "brave_api", .display_name = "Brave Search API",
-        .search_url = "https://api.search.brave.com/res/v1/web/search",
-        .search_url_encoded = "https://api.search.brave.com/res/v1/web/search?q={query}&count={count}&offset={offset}&search_lang={lang}&safesearch={safe}",
-        .query_param = "q", .page_param = "offset", .count_param = "count",
-        .results_per_page = 20, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = true, .api_key_env = "BRAVE_API_KEY", .tier = ENGINE_TIER_GLOBAL,
+        .requires_api_key = true, .api_key_env = "GOOGLE_API_KEY", .tier = ENGINE_TIER_GLOBAL,
         .country_code = "", .language_code = "en", .region_tag = "global",
-        .icon = "B", .enabled = true, .priority = 1, .rate_limit_ms = 200
-    },
-    {
-        .name = "ddg_api", .display_name = "DuckDuckGo API",
-        .search_url = "https://api.duckduckgo.com/",
-        .search_url_encoded = "https://api.duckduckgo.com/?q={query}&format=json",
-        .query_param = "q", .page_param = "", .count_param = "",
-        .results_per_page = 10, .supports_suggestions = false, .supports_images = false,
-        .supports_video = false, .supports_news = false, .supports_academic = false,
-        .requires_api_key = false, .tier = ENGINE_TIER_PRIVACY,
-        .country_code = "", .language_code = "en", .region_tag = "privacy",
-        .icon = "D", .enabled = true, .priority = 2, .rate_limit_ms = 500
+        .icon = "G", .enabled = true, .priority = 3, .rate_limit_ms = 400
     },
 };
 
@@ -459,6 +162,12 @@ char* engine_build_search_url(SearchEngine* engine, SearchQuery* query) {
                     query->safe_search == SAFE_STRICT ? "active" : query->safe_search == SAFE_MODERATE ? "moderate" : "off");
             } else if (strcmp(key, "country") == 0) {
                 pos += snprintf(url + pos, sizeof(url) - pos, "%s", query->country[0] ? query->country : "us");
+            } else if (strcmp(key, "key") == 0) {
+                const char* api_key = getenv(engine->api_key_env);
+                pos += snprintf(url + pos, sizeof(url) - pos, "%s", api_key ? api_key : "");
+            } else if (strcmp(key, "cx") == 0) {
+                const char* cx = getenv("GOOGLE_SEARCH_CX");
+                pos += snprintf(url + pos, sizeof(url) - pos, "%s", cx ? cx : "");
             } else {
                 pos += snprintf(url + pos, sizeof(url) - pos, "%s", val_buf);
             }

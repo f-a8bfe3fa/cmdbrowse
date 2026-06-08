@@ -416,10 +416,12 @@ SearchResponse* parser_parse_response(SearchEngine* engine, SearchQuery* query, 
     }
 
     SearchResponse* resp = NULL;
-    if (strcmp(engine->name, "brave_api") == 0) {
-        resp = parser_parse_brave_api(http_resp->body, engine, query);
-    } else if (strcmp(engine->name, "ddg_api") == 0) {
-        resp = parser_parse_ddg_api(http_resp->body, engine, query);
+    if (strcmp(engine->name, "tavily") == 0) {
+        resp = parser_parse_tavily_api(http_resp->body, engine, query);
+    } else if (strcmp(engine->name, "bing_api") == 0) {
+        resp = parser_parse_bing_api(http_resp->body, engine, query);
+    } else if (strcmp(engine->name, "google_api") == 0) {
+        resp = parser_parse_google_api(http_resp->body, engine, query);
     } else {
         ParserFunc parser = NULL;
         if (strcmp(engine->name, "google") == 0) parser = parser_parse_google;
